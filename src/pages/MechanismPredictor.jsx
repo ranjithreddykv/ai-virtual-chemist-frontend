@@ -257,32 +257,31 @@ const ReactionMechanismPredictor = () => {
   };
   const MECHANISM_EXAMPLES = [
     {
-      smiles:
-        "CC(C)(C)[P+]([Pd])(c1ccccc1-c1ccccc1)C(C)(C)C.Clc1ccccn1.OB(O)c1cccc2ccccc12.[Cs]O",
+      smiles: "Brc1ccc(cc1)B(O)O",
       title: "Suzuki–Miyaura Cross-Coupling (Palladium Catalysis)",
     },
     {
-      smiles: "ClC1=CC=CC=C1.CC[Ni]Cl.CCO.[K]OH",
+      smiles: "Clc1cccc(c1)C",
       title: "Nickel–Catalyzed Aryl Chloride Activation",
     },
     {
-      smiles: "CCOC(=O)C1=CC=CC=C1.NaOEt",
+      smiles: "CCOC(=O)c1ccccc1",
       title: "Claisen Condensation (Ester Enolate Formation)",
     },
     {
-      smiles: "CC(=O)OC1=CC=CC=C1.NH3",
+      smiles: "CC(=O)Oc1ccccc1",
       title: "Aminolysis of Esters (Nucleophilic Acyl Substitution)",
     },
     {
-      smiles: "BrC1=CC=CC=C1.CC=CC.O[Mg]Br",
+      smiles: "BrC1=CC=CC=C1CC=CC",
       title: "Grignard Addition to Alkenyl Aromatic System",
     },
     {
-      smiles: "O=CC1=CC=CC=C1.NH2OH.HCl",
+      smiles: "O=CC1=CC=CC=C1NO",
       title: "Oxime Formation via Nucleophilic Addition",
     },
     {
-      smiles: "CC(=O)C1=CC=CC=C1.Cl2.Pd(PPh3)4",
+      smiles: "CC(=O)c1ccc(cc1)C=C",
       title: "Heck Reaction (Palladium-Catalyzed Arylation)",
     },
   ];
