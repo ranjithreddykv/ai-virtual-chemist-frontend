@@ -129,11 +129,32 @@ const MoleculeViewer3D = ({
   // 3. Auto Rotate The Model
   // -----------------------------
   useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
+    if (!molData || !window.$3Dmol || !containerRef.current) return;
 
+    // Clean previous canvas
+    containerRef.current.innerHTML = "";
+
+    const viewer = window.$3Dmol.createViewer(containerRef.current, {
+      backgroundColor: "white",
+    });
+
+    viewer.addModel(molData, "mol");
+
+    viewer.setStyle({}, { stick: { radius: 0.2 }, sphere: { scale: 0.3 } });
+    viewer.zoomTo();
+    viewer.render();
+
+    viewerRef.current = viewer;
+
+    // Fade in animation
+    containerRef.current.style.opacity = 0;
+    setTimeout(() => {
+      containerRef.current.style.transition = "opacity 0.6s ease";
+      containerRef.current.style.opacity = 1;
+    }, 10);
+
+    // 🟢 Start rotation here for each molecule
     clearInterval(rotateIntervalRef.current);
-
     if (autoRotate) {
       rotateIntervalRef.current = setInterval(() => {
         viewer.rotate(1);
@@ -141,8 +162,11 @@ const MoleculeViewer3D = ({
       }, 40);
     }
 
-    return () => clearInterval(rotateIntervalRef.current);
-  }, [autoRotate]);
+    return () => {
+      clearInterval(pulseIntervalRef.current);
+      clearInterval(rotateIntervalRef.current);
+    };
+  }, [molData, autoRotate]);
 
   return (
     <div style={{ position: "relative" }}>
@@ -206,9 +230,9 @@ const ForwardPrediction = () => {
       reactants,
       conditions,
       predictedProduct: result?.predicted_product,
-      teacherExplanation: result?.teacher_explanation,
-      reactant3DCount: result?.reactants_3d?.length || 0,
-      has3DProduct: !!result?.product_3d,
+      explanation: result?.teacher_explanation,
+      reactantCount: result?.reactants_3d?.length || 0,
+      has3DProduct: Boolean(result?.product_3d),
     });
   }, [reactants, conditions, result, updateContext]);
 
@@ -277,11 +301,54 @@ const ForwardPrediction = () => {
       setLoading(false);
     }
   };
+ const FORWARD_RANDOM_EXAMPLES = [
+   {
+     reactants: "CC(=O)OC.O",
+     conditions: "H2O.NaOH",
+   },
+   {
+     reactants: "C1=CC=CC=C1.Br",
+     conditions: "FeBr3",
+   },
+   {
+     reactants: "CCO.O=O",
+     conditions: "",
+   },
+   {
+     reactants: "CCN(CC)CC.ClC1=CC=CC=C1",
+     conditions: "NaHCO3",
+   },
+   {
+     reactants: "C=CC=O.CCO",
+     conditions: "H+",
+   },
+   {
+     reactants: "CC(C)=O.OCCO",
+     conditions: "H2SO4",
+   },
+ ];
 
   const loadExample = () => {
-    setReactants("CC(=O)OC.O");
-    setConditions("H2O.NaOH");
+    const random =
+      FORWARD_RANDOM_EXAMPLES[
+        Math.floor(Math.random() * FORWARD_RANDOM_EXAMPLES.length)
+      ];
+
+    setReactants(random.reactants);
+    setConditions(random.conditions);
+
+    // Update tutor immediately
+    updateContext({
+      page: "forward_prediction",
+      reactants: random.reactants,
+      conditions: random.conditions,
+      predictedProduct: null,
+      explanation: null,
+      reactantCount: 0,
+      has3DProduct: false,
+    });
   };
+
 
   return (
     <div className="min-h-screen bg-linear-to-br from-blue-50 via-indigo-50 to-purple-100 relative overflow-hidden">

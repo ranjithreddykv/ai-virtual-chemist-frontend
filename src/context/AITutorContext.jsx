@@ -1,5 +1,12 @@
-/* eslint-disable no-unused-vars */
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
+import { useLocation } from "react-router-dom";
 
 const AITutorContext = createContext(null);
 
@@ -13,6 +20,8 @@ export function useAITutor() {
 }
 
 export function AITutorProvider({ children }) {
+  const location = useLocation();
+
   const [messages, setMessages] = useState([
     {
       id: "welcome",
@@ -24,62 +33,85 @@ export function AITutorProvider({ children }) {
 
   const [isLoading, setIsLoading] = useState(false);
 
-  const [pageContext, setPageContext] = useState(null);
-  const [chemContext, setChemContext] = useState(null);
+  const [pageContext, setPageContext] = useState({
+    page: location.pathname,
+  });
 
-  // Safely store context for the tutor
+  const [chemContext, setChemContext] = useState({});
+
+  const lastRouteRef = useRef(location.pathname);
+
+  /* ===============================================================
+     RESET CONVERSATION WHEN ROUTE ACTUALLY CHANGES
+  ============================================================== */
+  useEffect(() => {
+    if (location.pathname !== lastRouteRef.current) {
+      lastRouteRef.current = location.pathname;
+
+      console.log(
+        "🔄 Route changed → resetting tutor context:",
+        location.pathname
+      );
+
+      setPageContext({ page: location.pathname });
+      setChemContext({});
+
+      setMessages([
+        {
+          id: "welcome",
+          role: "assistant",
+          text: "Hi! I’m your AI Chemist Tutor. Ask me about reactions, mechanisms, or anything on this page.",
+          audio_url: null,
+        },
+      ]);
+    }
+  }, [location.pathname]);
+
+  /* ===============================================================
+     MANUALLY UPDATE CHEM CONTEXT FROM A PAGE
+  ============================================================== */
   const updateContext = useCallback((ctx) => {
     if (!ctx) return;
 
-    setPageContext({ page: ctx.page || "unknown" });
-
     const cleaned = Object.fromEntries(
-      Object.entries(ctx).filter(([_, v]) => v !== undefined)
+      Object.entries(ctx).filter(([, v]) => v !== undefined && v !== null)
     );
+
     setChemContext(cleaned);
   }, []);
 
-  // ------------------ ASK TUTOR ------------------
+  /* ===============================================================
+     ASK TUTOR — Main Logic
+  ============================================================== */
   const askTutor = useCallback(
     async (question) => {
-      const trimmed = question.trim();
-      if (!trimmed) return;
+      if (!question.trim()) return;
 
       const userMessage = {
         id: `${Date.now()}-user`,
         role: "user",
-        text: trimmed,
+        text: question.trim(),
+        audio_url: null,
       };
 
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
 
       try {
-        const safePageContext = pageContext || { page: "unknown" };
-
-        const safeChemContext =
-          chemContext &&
-          Object.fromEntries(
-            Object.entries(chemContext).filter(([_, v]) => v !== undefined)
-          );
-
-        let historySnapshot;
-        setMessages((prev) => {
-          historySnapshot = prev.map((m) => ({
-            role: m.role,
-            text: m.text,
-          }));
-          return prev;
-        });
+        // Prepare history in LLM-friendly format
+        const historyForLLM = [...messages, userMessage].map((m) => ({
+          role: m.role,
+          text: m.text,
+        }));
 
         const res = await fetch("http://localhost:8000/api/v1/ai-tutor", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            question: trimmed,
-            pageContext: safePageContext,
-            chemContext: safeChemContext || {},
-            history: historySnapshot,
+            question: question.trim(),
+            pageContext: pageContext,
+            chemContext: chemContext,
+            history: historyForLLM,
           }),
         });
 
@@ -90,20 +122,20 @@ export function AITutorProvider({ children }) {
         const assistantMessage = {
           id: `${Date.now()}-assistant`,
           role: "assistant",
-          text: data.answer, // markdown text answer
-          audio_url: data.audio_url || null, // neural TTS audio
+          text: data.answer,
+          audio_url: data.audio_url || null,
         };
 
         setMessages((prev) => [...prev, assistantMessage]);
       } catch (err) {
-        console.error("AI Tutor Error:", err);
+        console.error("Tutor Error:", err);
 
         setMessages((prev) => [
           ...prev,
           {
             id: `${Date.now()}-error`,
             role: "assistant",
-            text: "There was an issue processing your request. Please try again.",
+            text: "Sorry, I had trouble processing that. Please try again.",
             audio_url: null,
           },
         ]);
@@ -111,7 +143,7 @@ export function AITutorProvider({ children }) {
         setIsLoading(false);
       }
     },
-    [pageContext, chemContext]
+    [messages, pageContext, chemContext]
   );
 
   return (

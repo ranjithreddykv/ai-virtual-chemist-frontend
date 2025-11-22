@@ -29,78 +29,70 @@ import AITutorWidget from "./components/AITutorWidget";
 
 function App() {
   return (
-    <AITutorProvider>
-      <Router>
-        <div className="min-h-screen bg-gray-50 relative">
-          <nav className="bg-white shadow-md z-50 relative">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex justify-between h-16">
-                <div className="flex items-center">
-                  <Link
-                    to="/"
-                    className="flex items-center gap-2 text-xl font-bold text-gray-900"
-                  >
-                    <div className="p-2 bg-linear-to-br from-blue-600 to-purple-600 rounded-lg">
-                      <Beaker className="w-6 h-6 text-white" />
-                    </div>
-                    AI Virtual Chemist
-                  </Link>
+    <div className="min-h-screen bg-gray-50 relative">
+      <nav className="bg-white shadow-md z-50 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <Link
+                to="/"
+                className="flex items-center gap-2 text-xl font-bold text-gray-900"
+              >
+                <div className="p-2 bg-linear-to-br from-blue-600 to-purple-600 rounded-lg">
+                  <Beaker className="w-6 h-6 text-white" />
                 </div>
-
-                <div className="flex items-center space-x-4">
-                  <Link
-                    to="/forward"
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-blue-50 text-gray-700 hover:text-blue-600 transition-all"
-                  >
-                    <Beaker className="w-5 h-5" />
-                    Forward
-                  </Link>
-                  <Link
-                    to="/retrosynthesis"
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-purple-50 text-gray-700 hover:text-purple-600 transition-all"
-                  >
-                    <FlaskConical className="w-5 h-5" />
-                    Retrosynthesis
-                  </Link>
-                  <Link
-                    to="/yield"
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-green-50 text-gray-700 hover:text-green-600 transition-all"
-                  >
-                    <LineChart className="w-5 h-5" />
-                    Yield
-                  </Link>
-                  <Link
-                    to="/mechanism"
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-purple-50 text-gray-700 hover:text-purple-600 transition-all"
-                  >
-                    <Atom className="w-5 h-5" />
-                    Mechanism
-                  </Link>
-                </div>
-              </div>
+                AI Virtual Chemist
+              </Link>
             </div>
-          </nav>
 
-          {/* Main Routes */}
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/forward" element={<ForwardPrediction />} />
-            <Route
-              path="/retrosynthesis"
-              element={<RetrosynthesisPrediction />}
-            />
-            <Route path="/yield" element={<YieldPrediction />} />
-            <Route path="/mechanism" element={<ReactionMechanismPredictor />} />
-          </Routes>
-
-          {/* ✅ AI Tutor always visible (floating widget) */}
-          <AITutorWidget />
+            <div className="flex items-center space-x-4">
+              <Link
+                to="/forward"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-blue-50 text-gray-700 hover:text-blue-600 transition-all"
+              >
+                <Beaker className="w-5 h-5" />
+                Forward
+              </Link>
+              <Link
+                to="/retrosynthesis"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-purple-50 text-gray-700 hover:text-purple-600 transition-all"
+              >
+                <FlaskConical className="w-5 h-5" />
+                Retrosynthesis
+              </Link>
+              <Link
+                to="/yield"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-green-50 text-gray-700 hover:text-green-600 transition-all"
+              >
+                <LineChart className="w-5 h-5" />
+                Yield
+              </Link>
+              <Link
+                to="/mechanism"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-purple-50 text-gray-700 hover:text-purple-600 transition-all"
+              >
+                <Atom className="w-5 h-5" />
+                Mechanism
+              </Link>
+            </div>
+          </div>
         </div>
-      </Router>
-    </AITutorProvider>
+      </nav>
+
+      {/* Main Routes */}
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/forward" element={<ForwardPrediction />} />
+        <Route path="/retrosynthesis" element={<RetrosynthesisPrediction />} />
+        <Route path="/yield" element={<YieldPrediction />} />
+        <Route path="/mechanism" element={<ReactionMechanismPredictor />} />
+      </Routes>
+
+      {/* AI Tutor Floating Widget */}
+      <AITutorWidget />
+    </div>
   );
 }
-
 function HomePage() {
   const [isVisible, setIsVisible] = useState(false);
   const [hoveredCard, setHoveredCard] = useState(null);

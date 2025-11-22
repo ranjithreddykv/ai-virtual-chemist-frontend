@@ -21,9 +21,7 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import VirtualChemistVoiceAssistant from "../components/VirtualChemistVoiceAssistant"; 
-
-
+import { useAITutor } from "../context/AITutorContext";
 
 const API_BASE_URL = "http://localhost:8080";
 
@@ -38,159 +36,127 @@ const MoleculeViewer3D = ({
   autoRotate = true,
   pulse = true,
 }) => {
-  const viewerRef = useRef(null);
   const containerRef = useRef(null);
-  const pulseIntervalRef = useRef(null);
-  const rotateIntervalRef = useRef(null);
+  const viewerRef = useRef(null);
+  const pulseInterval = useRef(null);
+  const rotateInterval = useRef(null);
 
-  // -----------------------------
-  // 1. Initialize Viewer
-  // -----------------------------
-  useEffect(() => {
-    if (!molData || !window.$3Dmol || !containerRef.current) return;
-
-    // Clean previous canvas
-    containerRef.current.innerHTML = "";
-
-    const viewer = window.$3Dmol.createViewer(containerRef.current, {
-      backgroundColor: "white",
+  // -------------------------
+  // Load 3Dmol.js once
+  // -------------------------
+  const load3dmol = () =>
+    new Promise((resolve) => {
+      if (window.$3Dmol) return resolve();
+      const s = document.createElement("script");
+      s.src = "https://3Dmol.org/build/3Dmol-min.js";
+      s.onload = resolve;
+      document.head.appendChild(s);
     });
 
-    viewer.addModel(molData, "mol");
+  // -------------------------
+  // Initialize viewer (ONE EFFECT)
+  // -------------------------
+  useEffect(() => {
+    if (!molData || !containerRef.current) return;
+    let viewer;
 
-    // Base style
-    viewer.setStyle({}, { stick: { radius: 0.2 }, sphere: { scale: 0.3 } });
+    const init = async () => {
+      await load3dmol();
 
-    viewer.zoomTo();
-    viewer.render();
-    viewerRef.current = viewer;
+      const el = containerRef.current;
+      el.innerHTML = "";
 
-    // Fade in animation
-    containerRef.current.style.opacity = 0;
-    setTimeout(() => {
-      containerRef.current.style.transition = "opacity 0.6s ease";
-      containerRef.current.style.opacity = 1;
-    }, 10);
+      viewer = window.$3Dmol.createViewer(el, {
+        backgroundColor: "white",
+      });
+
+      viewer.addModel(molData, "mol");
+      viewer.setStyle({}, { stick: { radius: 0.2 }, sphere: { scale: 0.3 } });
+      viewer.zoomTo();
+      viewer.render();
+
+      viewerRef.current = viewer;
+
+      // fade in
+      el.style.opacity = 0;
+      setTimeout(() => {
+        el.style.transition = "opacity 0.6s ease";
+        el.style.opacity = 1;
+      }, 20);
+
+      // rotate
+      clearInterval(rotateInterval.current);
+      if (autoRotate) {
+        rotateInterval.current = setInterval(() => {
+          viewer.rotate(1);
+          viewer.render();
+        }, 40);
+      }
+
+      // pulse reactive atoms
+      clearInterval(pulseInterval.current);
+      if (pulse && reactiveAtoms.length > 0) {
+        let toggle = false;
+        pulseInterval.current = setInterval(() => {
+          const serials = reactiveAtoms.map((x) => x + 1);
+
+          viewer.setStyle(
+            {},
+            { stick: { radius: 0.2 }, sphere: { scale: 0.3 } }
+          );
+
+          viewer.setStyle(
+            { not: { serial: serials } },
+            {
+              stick: { radius: 0.18, color: "lightgray" },
+              sphere: { scale: 0.26 },
+            }
+          );
+
+          viewer.setStyle(
+            { serial: serials },
+            {
+              sphere: {
+                scale: toggle ? 0.55 : 0.45,
+                color: toggle ? "red" : "orange",
+              },
+              stick: {
+                radius: toggle ? 0.32 : 0.25,
+                color: toggle ? "red" : "orange",
+              },
+            }
+          );
+
+          viewer.render();
+          toggle = !toggle;
+        }, 700);
+      }
+    };
+
+    init();
 
     return () => {
-      clearInterval(pulseIntervalRef.current);
-      clearInterval(rotateIntervalRef.current);
+      clearInterval(rotateInterval.current);
+      clearInterval(pulseInterval.current);
     };
-  }, [molData]);
-
-  // -----------------------------
-  // 2. Highlight / Pulse Reactive Atoms
-  // -----------------------------
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-
-    clearInterval(pulseIntervalRef.current);
-
-    if (!reactiveAtoms.length) {
-      viewer.setStyle({}, { stick: { radius: 0.2 }, sphere: { scale: 0.3 } });
-      viewer.render();
-      return;
-    }
-
-    const serials = reactiveAtoms.map((i) => i + 1);
-
-    const applyPulse = (inflate) => {
-      viewer.setStyle({}, { stick: { radius: 0.2 }, sphere: { scale: 0.3 } });
-
-      // Normal atoms dimmed
-      viewer.setStyle(
-        { not: { serial: serials } },
-        { stick: { radius: 0.18, color: "lightgray" }, sphere: { scale: 0.26 } }
-      );
-
-      // Reactive atoms (pulse)
-      viewer.setStyle(
-        { serial: serials },
-        {
-          sphere: {
-            scale: inflate ? 0.55 : 0.45,
-            color: inflate ? "red" : "orange",
-          },
-          stick: {
-            radius: inflate ? 0.30 : 0.25,
-            color: inflate ? "red" : "orange",
-          },
-        }
-      );
-
-      viewer.render();
-    };
-
-    // First frame
-    applyPulse(false);
-
-    if (pulse) {
-      let state = false;
-      pulseIntervalRef.current = setInterval(() => {
-        applyPulse(state);
-        state = !state;
-      }, 700);
-    }
-
-    return () => clearInterval(pulseIntervalRef.current);
-  }, [reactiveAtoms, pulse]);
-
-  // -----------------------------
-  // 3. Auto Rotate The Model
-  // -----------------------------
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-
-    clearInterval(rotateIntervalRef.current);
-
-    if (autoRotate) {
-      rotateIntervalRef.current = setInterval(() => {
-        viewer.rotate(1);
-        viewer.render();
-      }, 40);
-    }
-
-    return () => clearInterval(rotateIntervalRef.current);
-  }, [autoRotate]);
+  }, [molData, reactiveAtoms, autoRotate, pulse]);
 
   return (
-    <div style={{ position: "relative" }}>
-      {/* Molecule name label */}
+    <div className="relative">
       {moleculeName && (
-        <div
-          style={{
-            position: "absolute",
-            top: "8px",
-            left: "10px",
-            padding: "4px 8px",
-            background: "rgba(0,0,0,0.55)",
-            color: "white",
-            fontSize: "13px",
-            borderRadius: "6px",
-            zIndex: 10,
-          }}
-        >
+        <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 text-xs text-white rounded">
           {moleculeName}
         </div>
       )}
 
       <div
         ref={containerRef}
-        style={{
-          width: "100%",
-          height: "360px",
-          borderRadius: "12px",
-          border: "1px solid #e5e7eb",
-          overflow: "hidden",
-        }}
+        className="w-full h-80 border rounded-xl"
+        style={{ overflow: "hidden" }}
       />
     </div>
   );
 };
-
-
 
 /* ======================================================================================
    Main Page Component
@@ -206,6 +172,7 @@ const ReactionMechanismPredictor = () => {
   const [threeDModels, setThreeDModels] = useState([]); // array of MOL blocks
   const [current3DIndex, setCurrent3DIndex] = useState(0);
   const [threeDLoading, setThreeDLoading] = useState(false);
+  const { updateContext } = useAITutor();
 
   /* ======================= API: Mechanism prediction ======================= */
 
@@ -267,17 +234,77 @@ const ReactionMechanismPredictor = () => {
     try {
       const data = await predictMechanism(smilesInput);
       setResult(data);
+      updateContext({
+        page: "mechanism_prediction",
+        mode: "mechanism_prediction",
+        inputSmiles: smilesInput,
+        initialSystem: data.initial_smiles,
+        finalProduct: data.final_product_smiles,
+        finalSystem: data.final_smiles_system,
+        stepCount: data.steps?.length || 0,
+        stepTypes: data.steps?.map(
+          (s) => s.model_step.predicted_elementary_step
+        ),
+        reactiveAtomsPerStep: data.steps?.map(
+          (s) => s.model_step.predicted_reactive_atoms_indices
+        ),
+      });
     } catch (err) {
       setError(err.message || "Failed to predict reaction mechanism.");
     } finally {
       setLoading(false);
     }
   };
+  const MECHANISM_EXAMPLES = [
+    {
+      smiles:
+        "CC(C)(C)[P+]([Pd])(c1ccccc1-c1ccccc1)C(C)(C)C.Clc1ccccn1.OB(O)c1cccc2ccccc12.[Cs]O",
+      title: "Suzuki–Miyaura Cross-Coupling (Palladium Catalysis)",
+    },
+    {
+      smiles: "ClC1=CC=CC=C1.CC[Ni]Cl.CCO.[K]OH",
+      title: "Nickel–Catalyzed Aryl Chloride Activation",
+    },
+    {
+      smiles: "CCOC(=O)C1=CC=CC=C1.NaOEt",
+      title: "Claisen Condensation (Ester Enolate Formation)",
+    },
+    {
+      smiles: "CC(=O)OC1=CC=CC=C1.NH3",
+      title: "Aminolysis of Esters (Nucleophilic Acyl Substitution)",
+    },
+    {
+      smiles: "BrC1=CC=CC=C1.CC=CC.O[Mg]Br",
+      title: "Grignard Addition to Alkenyl Aromatic System",
+    },
+    {
+      smiles: "O=CC1=CC=CC=C1.NH2OH.HCl",
+      title: "Oxime Formation via Nucleophilic Addition",
+    },
+    {
+      smiles: "CC(=O)C1=CC=CC=C1.Cl2.Pd(PPh3)4",
+      title: "Heck Reaction (Palladium-Catalyzed Arylation)",
+    },
+  ];
 
   const loadExample = () => {
-    setSmilesInput(
-      "CC(C)(C)[P+]([Pd])(c1ccccc1-c1ccccc1)C(C)(C)C.Clc1ccccn1.OB(O)c1cccc2ccccc12.[Cs]O"
-    );
+    const random =
+      MECHANISM_EXAMPLES[Math.floor(Math.random() * MECHANISM_EXAMPLES.length)];
+
+    setSmilesInput(random.smiles);
+
+    // Reset old results
+    setResult(null);
+    setThreeDModels([]);
+    setCurrent3DIndex(0);
+
+    // 🔥 Update AI Tutor context immediately
+    updateContext({
+      page: "mechanism_prediction",
+      isExampleLoaded: true,
+      exampleTitle: random.title,
+      exampleSmiles: random.smiles,
+    });
   };
 
   const getStepColor = (step) => {
@@ -766,9 +793,7 @@ const ReactionMechanismPredictor = () => {
           </div>
         </div>
       </div>
-      <>
-        
-      </>
+      <></>
     </div>
   );
 };

@@ -1,3 +1,4 @@
+/* eslint-disable no-self-assign */
 import React, { useState, useRef, useEffect } from "react";
 import { useAITutor } from "../context/AITutorContext";
 
@@ -80,6 +81,9 @@ export default function AITutorWidget() {
   const handleStopClick = () => {
     if (!audioRef.current) return;
     audioRef.current.pause();
+
+    audioRef.current.src = audioRef.current.src; // important fix
+
     audioRef.current.currentTime = 0;
     setCurrentTime(0);
     setIsPlaying(false);
@@ -110,27 +114,29 @@ export default function AITutorWidget() {
   const handleSeekChange = (e) => {
     const value = Number(e.target.value);
     setCurrentTime(value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = value;
+    }
   };
 
   const handleSeekMouseDown = () => {
     setIsSeeking(true);
   };
 
-  const handleSeekMouseUp = (e) => {
-    const value = Number(e.target.value);
-    if (audioRef.current) {
-      audioRef.current.currentTime = value;
-    }
+  const handleSeekMouseUp = () => {
     setIsSeeking(false);
   };
 
   const toggleVoice = () => {
     setVoiceOn((prev) => {
       const next = !prev;
-      if (!next) {
-        // If turning voice off, stop audio
-        handleStopClick();
+      if (!next && audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        setCurrentTime(0);
+        setIsPlaying(false);
       }
+
       return next;
     });
   };
@@ -155,15 +161,31 @@ export default function AITutorWidget() {
   useEffect(() => {
     const last = messages[messages.length - 1];
 
-    if (last?.role === "assistant" && last.audio_url && voiceOn) {
-      playAudioFromUrl(last.audio_url);
-    }
+    // scroll always
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    // only play if:
+    // 1) it's an assistant message
+    // 2) it has audio
+    // 3) voice tutor is ON
+    // 4) it is NOT an error message
+    if (
+      last?.role === "assistant" &&
+      last?.audio_url &&
+      voiceOn &&
+      !last.text?.includes("There was an issue") &&
+      !last.text?.includes("Try again")
+    ) {
+      audioRef.current.src = last.audio_url;
+      audioRef.current.onloadedmetadata = () => {
+        audioRef.current.currentTime = 0;
+        audioRef.current
+          .play()
+          .then(() => setIsPlaying(true))
+          .catch(() => setIsPlaying(false));
+      };
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages]);
+  }, [messages, voiceOn]);
 
   // ------------------ SPEECH-TO-TEXT (VOICE-DRIVEN MODE) ------------------
 
@@ -187,7 +209,8 @@ export default function AITutorWidget() {
     recog.onresult = (e) => {
       const text = e.results[0][0].transcript;
       setInput("");
-      askTutor(text); // voice-only flow: no need to hit send
+      // slight delay so autoPlay doesn't collide with mic event
+      setTimeout(() => askTutor(text), 150);
     };
 
     recognitionRef.current = recog;

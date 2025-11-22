@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { useAITutor } from "../context/AITutorContext";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -32,60 +33,62 @@ const MoleculeViewer3D = ({
   const viewerRef = useRef(null);
   const pulseIntervalRef = useRef(null);
   const rotateIntervalRef = useRef(null);
-  const [loading, setLoading] = useState(true);
 
-  /* Load 3Dmol.js if missing */
+  /* Load 3Dmol.js dynamically */
   const load3DmolScript = () =>
-    new Promise((resolve, reject) => {
+    new Promise((resolve) => {
       if (window.$3Dmol) return resolve();
       const script = document.createElement("script");
       script.src = "https://3Dmol.org/build/3Dmol-min.js";
       script.async = true;
       script.onload = resolve;
-      script.onerror = reject;
       document.head.appendChild(script);
     });
 
   /* ---------------------------
-       1. Initialize Viewer
+       Initialize + Rotation
   ---------------------------- */
   useEffect(() => {
     if (!molData || !containerRef.current) return;
 
     const initViewer = async () => {
+      await load3DmolScript();
+
+      const el = containerRef.current;
+
+      // clear previous contents
+      el.innerHTML = "";
+
+      const viewer = window.$3Dmol.createViewer(el, {
+        backgroundColor: "white",
+      });
+
       try {
-        setLoading(true);
-        await load3DmolScript();
+        viewer.addModel(molData, "mol");
+      } catch {
+        viewer.addModel(molData, "mol2");
+      }
 
-        const el = containerRef.current;
-        el.innerHTML = "";
+      viewer.setStyle({}, { stick: { radius: 0.2 }, sphere: { scale: 0.3 } });
 
-        const viewer = window.$3Dmol.createViewer(el, {
-          backgroundColor: "white",
-        });
+      viewer.zoomTo();
+      viewer.render();
+      viewerRef.current = viewer;
 
-        try {
-          viewer.addModel(molData, "mol");
-        } catch {
-          viewer.addModel(molData, "mol2");
-        }
+      // Fade in
+      el.style.opacity = 0;
+      setTimeout(() => {
+        el.style.transition = "opacity 0.6s ease-in-out";
+        el.style.opacity = 1;
+      }, 20);
 
-        viewer.setStyle({}, { stick: { radius: 0.2 }, sphere: { scale: 0.3 } });
-        viewer.zoomTo();
-        viewer.render();
-
-        viewerRef.current = viewer;
-        setLoading(false);
-
-        // fade-in animation
-        el.style.opacity = 0;
-        setTimeout(() => {
-          el.style.transition = "opacity 0.6s ease";
-          el.style.opacity = 1;
-        }, 10);
-      // eslint-disable-next-line no-unused-vars
-      } catch (err) {
-        setLoading(false);
+      /* ---------- ROTATION FIX ----------- */
+      clearInterval(rotateIntervalRef.current);
+      if (autoRotate) {
+        rotateIntervalRef.current = setInterval(() => {
+          viewer.rotate(1);
+          viewer.render();
+        }, 40);
       }
     };
 
@@ -95,10 +98,10 @@ const MoleculeViewer3D = ({
       clearInterval(pulseIntervalRef.current);
       clearInterval(rotateIntervalRef.current);
     };
-  }, [molData]);
+  }, [molData, autoRotate]);
 
   /* ---------------------------
-       2. Reactive Atom Pulse
+       Reactive Atom Pulse
   ---------------------------- */
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -138,54 +141,29 @@ const MoleculeViewer3D = ({
           },
         }
       );
+
       viewer.render();
     };
 
     applyPulse(false);
 
     if (pulse) {
-      let state = false;
+      let toggle = false;
       pulseIntervalRef.current = setInterval(() => {
-        applyPulse(state);
-        state = !state;
+        applyPulse(toggle);
+        toggle = !toggle;
       }, 700);
     }
   }, [reactiveAtoms, pulse]);
 
-  /* ---------------------------
-       3. Rotation Animation
-  ---------------------------- */
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-
-    clearInterval(rotateIntervalRef.current);
-
-    if (autoRotate) {
-      rotateIntervalRef.current = setInterval(() => {
-        viewer.rotate(1);
-        viewer.render();
-      }, 40);
-    }
-  }, [autoRotate]);
-
   return (
     <div className="relative">
-      {/* Molecule Label */}
       {moleculeName && (
-        <div className="absolute top-2 left-3 px-2 py-1 bg-black/60 text-white text-xs rounded-md z-20">
+        <div className="absolute top-2 left-3 px-2 py-1 bg-black/60 text-white text-xs rounded z-20">
           {moleculeName}
         </div>
       )}
 
-      {/* Loading Overlay */}
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100/70 rounded-xl z-10">
-          <Loader2 className="animate-spin text-green-600 w-6 h-6" />
-        </div>
-      )}
-
-      {/* Viewer Container */}
       <div
         ref={containerRef}
         className="w-full h-80 bg-white border rounded-xl"
@@ -209,6 +187,15 @@ const YieldPrediction = () => {
   const [error, setError] = useState(null);
 
   const [current3DIndex, setCurrent3DIndex] = useState(0);
+  const { updateContext } = useAITutor();
+  useEffect(() => {
+    updateContext({
+      page: "yield-prediction",
+      reactants,
+      reagents,
+      product,
+    });
+  }, [reactants, reagents, product, updateContext]);
 
   /* ---------------------------
       API CALL
@@ -242,18 +229,75 @@ const YieldPrediction = () => {
     try {
       const data = await predictYieldFull(reactants, reagents, product);
       setResult(data);
+      // Push complete chemistry context to tutor
+      updateContext({
+        page: "yield-prediction",
+
+        reactants,
+        reagents,
+        product,
+
+        predicted_yield: data.predicted_yield,
+        predicted_reactants: data.predicted_reactants,
+        improved_variants: data.yield_improvement_structured,
+        explanation: data.teacher_explanation,
+
+        reactants_list: data.reactants_list,
+        threeD_count: data.reactants_3d?.length || 0,
+      });
     } catch (err) {
       setError(err.message || "Prediction failed");
     } finally {
       setLoading(false);
     }
   };
+  const RANDOM_YIELD_EXAMPLES = [
+    {
+      reactants: "CC(=O)OC.O",
+      reagents: "H2O",
+      product: "CC(=O)O",
+    },
+    {
+      reactants: "CCO.CCBr",
+      reagents: "NaOH",
+      product: "CCOC(C)Br",
+    },
+    {
+      reactants: "C1=CC=CC=C1.O=O",
+      reagents: "",
+      product: "C1=CC=CC=C1O",
+    },
+    {
+      reactants: "CCN(CC)CC.ClC1=CC=CC=C1",
+      reagents: "NaHCO3",
+      product: "CCN(CC)CCOC1=CC=CC=C1",
+    },
+    {
+      reactants: "CC(C)=O.OCCO",
+      reagents: "H2SO4",
+      product: "CC(C)=OCCO",
+    },
+  ];
 
   const loadExample = () => {
-    setReactants("CC(=O)OC.O");
-    setReagents("H2O");
-    setProduct("CC(=O)O");
+    const random =
+      RANDOM_YIELD_EXAMPLES[
+        Math.floor(Math.random() * RANDOM_YIELD_EXAMPLES.length)
+      ];
+
+    setReactants(random.reactants);
+    setReagents(random.reagents);
+    setProduct(random.product);
+
+    // Update context immediately
+    updateContext({
+      page: "yield-prediction",
+      reactants: random.reactants,
+      reagents: random.reagents,
+      product: random.product,
+    });
   };
+
 
   /* ---------------------------
       Apply Better Variant

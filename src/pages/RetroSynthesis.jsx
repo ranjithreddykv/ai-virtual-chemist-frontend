@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { useAITutor } from "../context/AITutorContext";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -120,19 +121,45 @@ const MoleculeViewer3D = ({
   /* ---------------------------
        3. Auto-Rotation
   ---------------------------- */
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
+ useEffect(() => {
+   if (!molData || !window.$3Dmol || !containerRef.current) return;
 
-    clearInterval(rotateIntervalRef.current);
+   // Clean previous canvas
+   containerRef.current.innerHTML = "";
 
-    if (autoRotate) {
-      rotateIntervalRef.current = setInterval(() => {
-        viewer.rotate(1);
-        viewer.render();
-      }, 40);
-    }
-  }, [autoRotate]);
+   const viewer = window.$3Dmol.createViewer(containerRef.current, {
+     backgroundColor: "white",
+   });
+
+   viewer.addModel(molData, "mol");
+
+   viewer.setStyle({}, { stick: { radius: 0.2 }, sphere: { scale: 0.3 } });
+   viewer.zoomTo();
+   viewer.render();
+
+   viewerRef.current = viewer;
+
+   // Fade in animation
+   containerRef.current.style.opacity = 0;
+   setTimeout(() => {
+     containerRef.current.style.transition = "opacity 0.6s ease";
+     containerRef.current.style.opacity = 1;
+   }, 10);
+
+   // 🟢 Start rotation here for each molecule
+   clearInterval(rotateIntervalRef.current);
+   if (autoRotate) {
+     rotateIntervalRef.current = setInterval(() => {
+       viewer.rotate(1);
+       viewer.render();
+     }, 40);
+   }
+
+   return () => {
+     clearInterval(pulseIntervalRef.current);
+     clearInterval(rotateIntervalRef.current);
+   };
+ }, [molData, autoRotate]);
 
   /* ---------------------------
        4. Render Component
@@ -164,6 +191,13 @@ const RetrosynthesisPrediction = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const { updateContext } = useAITutor();
+  useEffect(() => {
+    updateContext({
+      page: "retrosynthesis",
+      mode: "retrosynthesis",
+    });
+  }, []);
 
   /* ---------------------------
        API CALL
@@ -189,17 +223,71 @@ const RetrosynthesisPrediction = () => {
 
     try {
       const data = await predictRetro();
+      updateContext({
+        page: "retrosynthesis",
+        mode: "retrosynthesis",
+        product: product,
+        predicted_reactants: data?.predicted_reactants,
+        reactants_list: data?.reactants_list,
+      });
+
       setResult(data);
+
+
     } catch (err) {
       setError(err.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
   };
+const RETRO_EXAMPLES = [
+  {
+    product: "CCN(CC)CCNC(=S)NC1CCCc2cc(C)cnc21",
+    name: "Thio-urea substituted bicyclic amine",
+  },
+  {
+    product: "CCOC(=O)C1=CC=CC=C1",
+    name: "Ethyl benzoate",
+  },
+  {
+    product: "CC(C)OC(=O)C1=CC=CC=C1",
+    name: "Isopropyl benzoate",
+  },
+  {
+    product: "COC(=O)CCN1CCCC1=O",
+    name: "N-morpholino propionate",
+  },
+  {
+    product: "CC(C)N(CCO)C(=O)C1=CC=CC=C1",
+    name: "Amide with isopropyl tertiary amine",
+  },
+  {
+    product: "CCOC(=O)NCCC1=CC=CC=C1",
+    name: "Phenethyl carbamate derivative",
+  },
+  {
+    product: "CCN(CC)CCOC(=O)C1=CC=CC=N1",
+    name: "Aromatic amide with tertiary amine",
+  },
+];
 
   const loadExample = () => {
-    setProduct("CCN(CC)CCNC(=S)NC1CCCc2cc(C)cnc21");
+    const random =
+      RETRO_EXAMPLES[Math.floor(Math.random() * RETRO_EXAMPLES.length)];
+
+    setProduct(random.product);
+
+    // Update Tutor Context immediately
+    updateContext({
+      page: "retrosynthesis",
+      mode: "retrosynthesis",
+      product: random.product,
+      exampleName: random.name,
+      predicted_reactants: null,
+      reactants_list: null,
+    });
   };
+
 
   /* ---------------------------
        Prepare Molecules
